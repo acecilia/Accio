@@ -27,18 +27,12 @@ class XcodeProjectIntegrationServiceTests: XCTestCase {
 
     private var frameworkProducts: [FrameworkProduct] {
         return testFrameworkNames.map {
-            FrameworkProduct(
-                frameworkDirPath: testResourcesDir.appendingPathComponent(Constants.buildPath).appendingPathComponent("iOS/\($0).framework").path,
-                symbolsFilePath: testResourcesDir.appendingPathComponent(Constants.buildPath).appendingPathComponent("iOS/\($0).framework.dSYM").path
-            )
-        }
-    }
-
-    private var copiedFrameworkProducts: [FrameworkProduct] {
-        return testFrameworkNames.map {
-            FrameworkProduct(
-                frameworkDirPath: testResourcesDir.appendingPathComponent(Constants.dependenciesPath).appendingPathComponent("iOS/\($0).framework").path,
-                symbolsFilePath: testResourcesDir.appendingPathComponent(Constants.dependenciesPath).appendingPathComponent("iOS/\($0).framework.dSYM").path
+            let framework = Framework(projectName: "", libraryName: $0, version: nil, projectDirectory: "", requiredFrameworks: [])
+            return FrameworkProduct(
+                for: framework,
+                with: .iOS,
+                tmpDirUrl: testResourcesDir.appendingPathComponent(Constants.buildPath),
+                installDirUrl: testResourcesDir.appendingPathComponent(Constants.dependenciesPath)
             )
         }
     }
@@ -60,9 +54,9 @@ class XcodeProjectIntegrationServiceTests: XCTestCase {
             resourcesLoaded(frameworkProductsResources + [xcodeProjectResource]) {
                 // ensure frameworks not yet copied
 
-                for frameworkProduct in copiedFrameworkProducts {
-                    XCTAssert(!FileManager.default.fileExists(atPath: frameworkProduct.frameworkDirPath))
-                    XCTAssert(!FileManager.default.fileExists(atPath: frameworkProduct.symbolsFilePath))
+                for frameworkProduct in frameworkProducts {
+                    XCTAssert(!FileManager.default.fileExists(atPath: frameworkProduct.installFrameworkUrl.path))
+                    XCTAssert(!FileManager.default.fileExists(atPath: frameworkProduct.installSymbolsUrl.path))
                 }
 
                 // ensure frameworks not yet linked
@@ -78,9 +72,9 @@ class XcodeProjectIntegrationServiceTests: XCTestCase {
                 try! xcodeProjectIntegrationService.updateDependencies(of: appTarget, for: .iOS, with: frameworkProducts)
 
                 // test copyFrameworkProducts
-                for frameworkProduct in copiedFrameworkProducts {
-                    XCTAssert(FileManager.default.fileExists(atPath: frameworkProduct.frameworkDirPath))
-                    XCTAssert(FileManager.default.fileExists(atPath: frameworkProduct.symbolsFilePath))
+                for frameworkProduct in frameworkProducts {
+                    XCTAssert(FileManager.default.fileExists(atPath: frameworkProduct.installFrameworkUrl.path))
+                    XCTAssert(FileManager.default.fileExists(atPath: frameworkProduct.installSymbolsUrl.path))
                 }
 
                 pbxproject = readPbxproject()

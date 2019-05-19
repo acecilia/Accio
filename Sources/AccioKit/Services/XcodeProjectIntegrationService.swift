@@ -86,35 +86,31 @@ final class XcodeProjectIntegrationService {
     }
 
     func updateDependencies(of appTarget: AppTarget, for platform: Platform, with frameworkProducts: [FrameworkProduct]) throws {
-        let dependenciesPlatformPath = "\(workingDirectory)/\(Constants.dependenciesPath)/\(platform.rawValue)"
-        let copiedFrameworkProducts: [FrameworkProduct] = try copy(frameworkProducts: frameworkProducts, of: appTarget, to: dependenciesPlatformPath)
+        let copiedFrameworkProducts: [FrameworkProduct] = try copy(frameworkProducts: frameworkProducts, of: appTarget)
         try link(frameworkProducts: copiedFrameworkProducts, with: appTarget, for: platform)
     }
 
-    private func copy(frameworkProducts: [FrameworkProduct], of appTarget: AppTarget, to targetPath: String) throws -> [FrameworkProduct] {
+    private func copy(frameworkProducts: [FrameworkProduct], of appTarget: AppTarget) throws -> [FrameworkProduct] {
         print("Copying build products of target '\(appTarget.targetName)' into folder '\(Constants.dependenciesPath)' ...", level: .info)
 
-        try bash("mkdir -p '\(targetPath)'")
         var copiedFrameworkProducts: [FrameworkProduct] = []
 
         for frameworkProduct in frameworkProducts {
-            let frameworkDirPath = "\(targetPath)/\(frameworkProduct.frameworkDirUrl.lastPathComponent)"
-            let symbolsFilePath = "\(targetPath)/\(frameworkProduct.symbolsFileUrl.lastPathComponent)"
+            try bash("mkdir -p '\(frameworkProduct.installDirUrl.path)'")
 
-            if FileManager.default.fileExists(atPath: frameworkDirPath) {
-                try bash("rm -rf '\(frameworkDirPath)'")
+            if FileManager.default.fileExists(atPath: frameworkProduct.installFrameworkUrl.path) {
+                try FileManager.default.removeItem(at: frameworkProduct.installFrameworkUrl)
+                try bash("rm -rf '\(frameworkProduct.installFrameworkUrl.path)'")
             }
 
-            if FileManager.default.fileExists(atPath: symbolsFilePath) {
-                try bash("rm -rf '\(symbolsFilePath)'")
+            if FileManager.default.fileExists(atPath: frameworkProduct.installSymbolsUrl.path) {
+                try bash("rm -rf '\(frameworkProduct.installSymbolsUrl.path)'")
             }
 
-            try bash("cp -R '\(frameworkProduct.frameworkDirPath)' '\(frameworkDirPath)'")
-            try bash("cp -R '\(frameworkProduct.symbolsFilePath)' '\(symbolsFilePath)'")
+            try bash("cp -R '\(frameworkProduct.tmpFrameworkUrl.path)' '\(frameworkProduct.installFrameworkUrl.path)'")
+            try bash("cp -R '\(frameworkProduct.tmpSymbolsUrl.path)' '\(frameworkProduct.installSymbolsUrl.path)'")
 
-            let frameworkProduct = FrameworkProduct(frameworkDirPath: frameworkDirPath, symbolsFilePath: symbolsFilePath)
             try frameworkProduct.cleanupRecursiveFrameworkIfNeeded()
-
             copiedFrameworkProducts.append(frameworkProduct)
         }
 
@@ -149,16 +145,16 @@ final class XcodeProjectIntegrationService {
         let targetGroup = try dependenciesGroup.group(named: appTarget.targetName) ?? dependenciesGroup.addGroup(named: appTarget.targetName, options: .withoutFolder)[0]
 
         // manage added files
-        let frameworksToAdd = frameworkProducts.filter { product in !targetGroup.children.compactMap { $0.path }.contains { $0.hasSuffix(product.frameworkDirUrl.lastPathComponent) } }.removingDuplicates()
+        let frameworksToAdd = frameworkProducts.filter { product in !targetGroup.children.compactMap { $0.path }.contains { $0.hasSuffix(product.tmpFrameworkUrl.lastPathComponent) } }.removingDuplicates()
         let platformGroupName = "\(Constants.xcodeDependenciesGroup)/\(targetGroup.name!)"
 
         if !frameworksToAdd.isEmpty {
-            let frameworkNames = frameworksToAdd.map { $0.frameworkDirUrl.lastPathComponent.components(separatedBy: ".").first! }
+            let frameworkNames = frameworksToAdd.map { $0.tmpFrameworkUrl.lastPathComponent.components(separatedBy: ".").first! }
             print("Adding frameworks \(frameworkNames) to project navigator group '\(platformGroupName)' & linking with target '\(appTarget.targetName)' ...", level: .info)
 
             for frameworkToAdd in frameworksToAdd {
                 let frameworkFileRef = try targetGroup.addFile(
-                    at: Path(frameworkToAdd.frameworkDirPath),
+                    at: Path(frameworkToAdd.tmpFrameworkUrl.path),
                     sourceRoot: Path(workingDirectory),
                     override: false
                 )
@@ -170,7 +166,7 @@ final class XcodeProjectIntegrationService {
         }
 
         // manage removed files
-        let filesToRemove = targetGroup.children.filter { fileRef in !frameworkProducts.contains { $0.frameworkDirPath.hasSuffix(fileRef.name!) } }
+        let filesToRemove = targetGroup.children.filter { fileRef in !frameworkProducts.contains { $0.tmpFrameworkUrl.path.hasSuffix(fileRef.name!) } }
 
         if !filesToRemove.isEmpty {
             let fileNames = filesToRemove.map { $0.name! }

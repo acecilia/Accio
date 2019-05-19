@@ -83,5 +83,9 @@ extension DependencyInstaller {
 
         try XcodeProjectIntegrationService.shared.handleRemovedTargets(keepingTargets: appTargets)
         try bash("rm -rf '\(Constants.temporaryFrameworksUrl.path)'")
+
+        for parsingResult in parsingResults {
+            try CocoaPodsIntegratorService.shared.updateDependencies(parsingResult.frameworkProducts , parsingResult.target, for: parsingResult.platform)
+        }
     }
 }

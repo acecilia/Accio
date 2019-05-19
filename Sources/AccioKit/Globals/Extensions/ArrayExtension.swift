@@ -27,7 +27,7 @@ extension Array where Element == FrameworkProduct {
         var uniqElements: [FrameworkProduct] = []
 
         for element in self {
-            if !uniqElements.contains(where: { $0.frameworkDirPath == element.frameworkDirPath }) {
+            if !uniqElements.contains(where: { $0.tmpFrameworkUrl.path == element.tmpFrameworkUrl.path }) {
                 uniqElements.append(element)
             }
         }

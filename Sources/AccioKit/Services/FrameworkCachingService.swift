@@ -14,7 +14,7 @@ final class FrameworkCachingService {
 
         if FileManager.default.fileExists(atPath: localCachedFileUrl.path) {
             print("Found cached build products for \(framework.libraryName) in local cache - skipping build.", level: .info)
-            return try frameworkProduct(forCachedFileAt: localCachedFileUrl)
+            return try frameworkProduct(for: framework, withCachedFileAt: localCachedFileUrl)
         }
 
         if let sharedCachePath = sharedCachePath {
@@ -22,33 +22,33 @@ final class FrameworkCachingService {
 
             if FileManager.default.fileExists(atPath: sharedCacheFileUrl.path) {
                 print("Found cached build products for \(framework.libraryName) in shared cache - skipping build.", level: .info)
-                return try frameworkProduct(forCachedFileAt: sharedCacheFileUrl)
+                return try frameworkProduct(for: framework, withCachedFileAt: sharedCacheFileUrl)
             }
         }
 
         return nil
     }
 
-    func cache(product: FrameworkProduct, framework: Framework, platform: Platform) throws {
-        let subpath: String = cacheFileSubPath(framework: framework, platform: platform)
+    func cache(product: FrameworkProduct, platform: Platform) throws {
+        let subpath: String = cacheFileSubPath(framework: product.framework, platform: platform)
 
         if
             let sharedCachePath = sharedCachePath,
             FileManager.default.fileExists(atPath: URL(fileURLWithPath: sharedCachePath).deletingLastPathComponent().path)
         {
             try cache(product: product, to: URL(fileURLWithPath: sharedCachePath).appendingPathComponent(subpath))
-            print("Saved build products for \(framework.libraryName) in shared cache.", level: .info)
+            print("Saved build products for \(product.framework.libraryName) in shared cache.", level: .info)
         } else {
             try cache(product: product, to: URL(fileURLWithPath: Constants.localCachePath).appendingPathComponent(subpath))
-            print("Saved build products for \(framework.libraryName) in local cache.", level: .info)
+            print("Saved build products for \(product.framework.libraryName) in local cache.", level: .info)
         }
     }
 
-    private func frameworkProduct(forCachedFileAt cachedFileUrl: URL) throws -> FrameworkProduct {
+    private func frameworkProduct(for framework: Framework, withCachedFileAt cachedFileUrl: URL) throws -> FrameworkProduct {
         let libraryName: String = cachedFileUrl.pathComponents.suffix(3).first!
-        let platformName: String = cachedFileUrl.deletingPathExtension().lastPathComponent
+        let platform = Platform(rawValue: cachedFileUrl.deletingPathExtension().lastPathComponent)!
 
-        let frameworkProduct = FrameworkProduct(libraryName: libraryName, platformName: platformName)
+        let frameworkProduct = FrameworkProduct(for: framework, with: platform)
 
         let subpath: String = cachedFileUrl.deletingPathExtension().pathComponents.suffix(3).joined(separator: "/")
         let unzippingUrl: URL = Constants.temporaryUncachingUrl.appendingPathComponent(subpath)
@@ -59,10 +59,10 @@ final class FrameworkCachingService {
         let unzippedFrameworkDirPath = unzippingUrl.appendingPathComponent("\(libraryName).framework").path
         let unzippedSymbolsFilePath = unzippingUrl.appendingPathComponent("\(libraryName).framework.dSYM").path
 
-        try bash("mkdir -p '\(frameworkProduct.frameworkDirUrl.deletingLastPathComponent().path)'")
+        try bash("mkdir -p '\(frameworkProduct.tmpFrameworkUrl.deletingLastPathComponent().path)'")
 
-        try run(bash: "cp -R '\(unzippedFrameworkDirPath)' '\(frameworkProduct.frameworkDirPath)'")
-        try run(bash: "cp -R '\(unzippedSymbolsFilePath)' '\(frameworkProduct.symbolsFilePath)'")
+        try run(bash: "cp -R '\(unzippedFrameworkDirPath)' '\(frameworkProduct.tmpFrameworkUrl.path)'")
+        try run(bash: "cp -R '\(unzippedSymbolsFilePath)' '\(frameworkProduct.tmpSymbolsUrl.path)'")
 
         try frameworkProduct.cleanupRecursiveFrameworkIfNeeded()
 
@@ -79,7 +79,7 @@ final class FrameworkCachingService {
         let previousCurrentDirectoryPath = FileManager.default.currentDirectoryPath
         defer { FileManager.default.changeCurrentDirectoryPath(previousCurrentDirectoryPath) }
 
-        FileManager.default.changeCurrentDirectoryPath(product.frameworkDirUrl.deletingLastPathComponent().path)
-        try run(bash: "zip -r -q -y '\(targetUrl.path)' '\(product.frameworkDirUrl.lastPathComponent)' '\(product.symbolsFileUrl.lastPathComponent)'")
+        FileManager.default.changeCurrentDirectoryPath(product.tmpFrameworkUrl.deletingLastPathComponent().path)
+        try run(bash: "zip -r -q -y '\(targetUrl.path)' '\(product.tmpFrameworkUrl.lastPathComponent)' '\(product.tmpSymbolsUrl.lastPathComponent)'")
     }
 }

@@ -1,34 +1,36 @@
 import Foundation
 
 struct FrameworkProduct {
-    let frameworkDirPath: String
-    let symbolsFilePath: String
+    let framework: Framework
+    let tmpDirUrl: URL
+    let tmpFrameworkUrl: URL
+    let tmpSymbolsUrl: URL
+    let installDirUrl: URL
+    let installFrameworkUrl: URL
+    let installSymbolsUrl: URL
 
-    init(frameworkDirPath: String, symbolsFilePath: String) {
-        self.frameworkDirPath = frameworkDirPath
-        self.symbolsFilePath = symbolsFilePath
+    init(
+        for framework: Framework,
+        with platform: Platform,
+        tmpDirUrl: URL = Constants.temporaryFrameworksUrl,
+        installDirUrl: URL = URL(fileURLWithPath: Constants.dependenciesPath)
+        ) {
+        let frameworkSubPath = "\(platform.rawValue)/\(framework.libraryName).framework"
+
+        self.framework = framework
+        
+        self.tmpDirUrl = tmpDirUrl
+        self.tmpFrameworkUrl = tmpDirUrl.appendingPathComponent(frameworkSubPath)
+        self.tmpSymbolsUrl = tmpFrameworkUrl.appendingPathExtension("dSYM")
+
+        self.installDirUrl = installDirUrl
+        self.installFrameworkUrl = installDirUrl.appendingPathComponent(frameworkSubPath)
+        self.installSymbolsUrl = installFrameworkUrl.appendingPathExtension("dSYM")
     }
-
-    init(libraryName: String, platformName: String) {
-        self.frameworkDirPath = Constants.temporaryFrameworksUrl.appendingPathComponent("\(platformName)/\(libraryName).framework").path
-        self.symbolsFilePath = Constants.temporaryFrameworksUrl.appendingPathComponent("\(platformName)/\(libraryName).framework.dSYM").path
-    }
-
-    var frameworkDirUrl: URL {
-        return URL(fileURLWithPath: frameworkDirPath)
-    }
-
-    var symbolsFileUrl: URL {
-        return URL(fileURLWithPath: symbolsFilePath)
-    }
-
-    var libraryName: String {
-        return frameworkDirUrl.lastPathComponent.replacingOccurrences(of: ".framework", with: "")
-    }
-
+    
     // This is a workaround for issues with frameworks that symlink to themselves (first found in RxSwift)
     func cleanupRecursiveFrameworkIfNeeded() throws {
-        let recursiveFrameworkPath: String = frameworkDirUrl.appendingPathComponent(frameworkDirUrl.lastPathComponent).path
+        let recursiveFrameworkPath: String = tmpFrameworkUrl.appendingPathComponent(tmpFrameworkUrl.lastPathComponent).path
         if FileManager.default.fileExists(atPath: recursiveFrameworkPath) {
             try FileManager.default.removeItem(atPath: recursiveFrameworkPath)
         }
