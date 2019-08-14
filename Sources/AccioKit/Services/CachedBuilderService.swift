@@ -32,8 +32,8 @@ final class CachedBuilderService {
         dependencyGraph: DependencyGraph,
         platform: Platform,
         swiftVersion: String
-    ) throws -> [FrameworkProduct] {
-        var frameworkProducts: [FrameworkProduct] = []
+    ) throws -> [BuiltFramework] {
+        var frameworkProducts: [BuiltFramework] = []
 
         let frameworks = try appTarget.frameworkDependencies(manifest: manifest, dependencyGraph: dependencyGraph).flattenedDeepFirstOrder()
         let frameworksWithoutDuplicates: [Framework] = frameworks.reduce(into: []) { result, framework in
@@ -50,11 +50,11 @@ final class CachedBuilderService {
             {
                 frameworkProducts.append(cachedFrameworkProduct)
             } else {
-                let frameworkProduct: FrameworkProduct
+                let builtFramework: BuiltFramework
                 switch try InstallationTypeDetectorService.shared.detectInstallationType(for: framework) {
                 case .swiftPackageManager:
                     try XcodeProjectGeneratorService.shared.generateXcodeProject(framework: framework)
-                    frameworkProduct = try carthageBuilderService.build(
+                    builtFramework = try carthageBuilderService.build(
                         framework: framework,
                         platform: platform,
                         swiftVersion: swiftVersion,
@@ -63,7 +63,7 @@ final class CachedBuilderService {
 
                 case .carthage:
                     try GitResetService.shared.resetGit(atPath: framework.projectDirectory, includeUntrackedFiles: false)
-                    frameworkProduct = try carthageBuilderService.build(
+                    builtFramework = try carthageBuilderService.build(
                         framework: framework,
                         platform: platform,
                         swiftVersion: swiftVersion,
@@ -73,7 +73,7 @@ final class CachedBuilderService {
 
                 if
                     let frameworkSwiftVersion = (
-                        try? SwiftVersionDetectorService.shared.detectSwiftVersion(ofFrameworkProduct: frameworkProduct)
+                        try? SwiftVersionDetectorService.shared.detectSwiftVersion(ofFrameworkProduct: builtFramework.product)
                     ) ?? (
                         try? SwiftVersionDetectorService.shared.getCurrentSwiftVersion()
                     )
@@ -87,7 +87,7 @@ final class CachedBuilderService {
                     throw CachedBuilderServiceError.unableToRetrieveSwiftVersion
                 }
 
-                frameworkProducts.append(frameworkProduct)
+                frameworkProducts.append(builtFramework)
             }
         }
 

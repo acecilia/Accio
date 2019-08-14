@@ -8,13 +8,13 @@ final class FrameworkCachingService {
         self.sharedCachePath = sharedCachePath
     }
 
-    func cachedProduct(framework: Framework, platform: Platform, swiftVersion: String) throws -> FrameworkProduct? {
+    func cachedProduct(framework: Framework, platform: Platform, swiftVersion: String) throws -> BuiltFramework? {
         let subpath: String = cacheFileSubPath(framework: framework, platform: platform, swiftVersion: swiftVersion)
         let localCachedFileUrl = URL(fileURLWithPath: Constants.localCachePath).appendingPathComponent(subpath)
 
         if FileManager.default.fileExists(atPath: localCachedFileUrl.path) {
             print("Found cached build products for \(framework.libraryName) in local cache - skipping build.", level: .info)
-            return try frameworkProduct(forCachedFileAt: localCachedFileUrl)
+            return BuiltFramework(framework, try frameworkProduct(forCachedFileAt: localCachedFileUrl))
         }
 
         if let sharedCachePath = sharedCachePath {
@@ -22,7 +22,7 @@ final class FrameworkCachingService {
 
             if FileManager.default.fileExists(atPath: sharedCacheFileUrl.path) {
                 print("Found cached build products for \(framework.libraryName) in shared cache - skipping build.", level: .info)
-                return try frameworkProduct(forCachedFileAt: sharedCacheFileUrl)
+                return BuiltFramework(framework, try frameworkProduct(forCachedFileAt: sharedCacheFileUrl))
             }
         }
 

@@ -28,13 +28,19 @@ class XcodeProjectIntegrationServiceTests: XCTestCase {
         }
     }
 
-    private var frameworkProducts: [FrameworkProduct] {
+    private var manifestResource: Resource {
+        return Resource(url: testResourcesDir.appendingPathComponent("Package.swift"), contents: "")
+    }
+
+    private var frameworkProducts: [BuiltFramework] {
         return testFrameworks.map {
-            FrameworkProduct(
+            let framework = Framework(projectName: "", libraryName: $0.name, version: nil, projectDirectory: "", requiredFrameworks: [])
+            let product = FrameworkProduct(
                 frameworkDirPath: testResourcesDir.appendingPathComponent(Constants.buildPath).appendingPathComponent("iOS/\($0.name).framework").path,
                 symbolsFilePath: testResourcesDir.appendingPathComponent(Constants.buildPath).appendingPathComponent("iOS/\($0.name).framework.dSYM").path,
                 commitHash: "abc"
             )
+            return BuiltFramework(framework, product)
         }
     }
 
@@ -69,7 +75,7 @@ class XcodeProjectIntegrationServiceTests: XCTestCase {
         let xcodeProjectIntegrationService = XcodeProjectIntegrationService(workingDirectory: testResourcesDir.path)
 
         for appTarget in [regularTarget, testTarget] {
-            resourcesLoaded(frameworkProductsResources + [xcodeProjectResource]) {
+            resourcesLoaded(frameworkProductsResources + [xcodeProjectResource] + [manifestResource]) {
                 // ensure frameworks not yet copied
 
                 for frameworkProduct in copiedFrameworkProducts {
@@ -94,7 +100,7 @@ class XcodeProjectIntegrationServiceTests: XCTestCase {
                 try! xcodeProjectIntegrationService.updateDependencies(of: appTarget, for: .iOS, with: frameworkProducts)
 
                 // test CFBundleVersion in Info.plist
-                frameworkProducts.forEach { product in
+                frameworkProducts.products.forEach { product in
                     let frameworkPath = product.frameworkDirPath.replacingOccurrences(of: "/.accio/", with: "/Dependencies/")
                     let plistURL = URL(fileURLWithPath: frameworkPath).appendingPathComponent("Info.plist")
                     let data = try! Data(contentsOf: plistURL)

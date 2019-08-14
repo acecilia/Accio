@@ -11,35 +11,45 @@ enum CocoaPodsIntegratorServiceError: Error {
 final class CocoaPodsIntegratorService {
     private static let groupNameSuffix = "_accio"
 
-    static let shared = CocoaPodsIntegratorService(workingDirectory: GlobalOptions.workingDirectory.value ?? FileManager.default.currentDirectoryPath)
-
     private let workingDirectory: String
 
     init(workingDirectory: String) {
         self.workingDirectory = workingDirectory
     }
 
-    func update(frameworks: [Framework], of appTarget: AppTarget, with frameworkProducts: [FrameworkProduct]) throws {
-        try generatePodspecFiles(for: frameworks, with: frameworkProducts)
-        try integrateInPodfile(frameworks, appTarget.targetName)
+    func update(targetName: String, builtFrameworks: [BuiltFramework]) throws -> [BuiltFramework] {
+        var cocoapodsDependencies: [BuiltFramework] = []
+        try builtFrameworks.forEach {
+            switch try ManifestCommentsHandlerService(workingDirectory: workingDirectory).integration(for: $0.framework.libraryName, in: targetName) {
+            case .cocoapods:
+                cocoapodsDependencies.append($0)
+
+            case .binary:
+                break
+            }
+        }
+
+        // Only execute the cocoapods integration if needed
+        if cocoapodsDependencies.isEmpty == false {
+            try generatePodspecFiles(for: cocoapodsDependencies)
+            try integrateInPodfile(cocoapodsDependencies, of: targetName)
+        }
+        return builtFrameworks.filter { cocoapodsDependencies.contains($0) == false }
     }
 
-    private func generatePodspecFiles(for frameworks: [Framework], with frameworkProducts: [FrameworkProduct]) throws {
-        for framework in frameworks {
-            let podspecContent = try generatePodspec(for: framework, using: frameworkProducts)
-            let product = try frameworkProducts.filter(matching: framework)
-            let podspecPath = product.frameworkDirUrl.deletingPathExtension().appendingPathExtension("podspec")
+    private func generatePodspecFiles(for builtFrameworks: [BuiltFramework]) throws {
+        for builtFramework in builtFrameworks {
+            let podspecContent = try generatePodspec(for: builtFramework, with: builtFrameworks)
+            let podspecPath = builtFramework.product.frameworkDirUrl.deletingPathExtension().appendingPathExtension("podspec")
             try podspecContent.write(toFile: podspecPath.path, atomically: false, encoding: .utf8)
         }
     }
 
-    private func integrateInPodfile(_ frameworks: [Framework], _ targetName: String) throws {
+    private func integrateInPodfile(_ builtFrameworks: [BuiltFramework], of targetName: String) throws {
         var localPods: [String] = []
-        for framework in frameworks {
-            // TODO: finish
-            // let podspecParentPath = frameworkProduct.frameworkDirUrl.deletingLastPathComponent().path.replacingOccurrences(of: workingDirectory, with: ".")
-            let podspecParentPath = URL(fileReferenceLiteralResourceName: "")
-            localPods.append("pod '\(framework.libraryName)', :path => '\(podspecParentPath)'")
+        for builtFramework in builtFrameworks {
+            let podspecParentPath = builtFramework.product.frameworkDirUrl.deletingLastPathComponent().path.replacingOccurrences(of: workingDirectory, with: ".")
+            localPods.append("pod '\(builtFramework.framework.libraryName)', :path => '\(podspecParentPath)'")
         }
         localPods = localPods.sorted()
 
@@ -83,11 +93,11 @@ final class CocoaPodsIntegratorService {
         try podfile.write(toFile: podfilePath, atomically: false, encoding: .utf8)
     }
 
-    private func generatePodspec(for framework: Framework, using frameworkProducts: [FrameworkProduct]) throws -> String {
+    private func generatePodspec(for builtFramework: BuiltFramework, with builtFrameworks: [BuiltFramework]) throws -> String {
         // Get the dependency strings to be added to the podspec
-        var dependencies: [String] = try framework.requiredFrameworks.map { dependency in
+        var dependencies: [String] = try builtFramework.framework.requiredFrameworks.map { dependency in
             let version = try dependency.version ?? {
-                let dependencyProduct = try frameworkProducts.filter(matching: dependency)
+                let dependencyProduct = try builtFrameworks.filter(matching: dependency).product
                 return try getVersionFor(dependencyProduct)
             }()
             return "s.dependency '\(dependency.libraryName)', '\(version)'"
@@ -99,13 +109,13 @@ final class CocoaPodsIntegratorService {
             dependencies.append("")
         }
 
-        let version = try framework.version ?? getVersionFor(try frameworkProducts.filter(matching: framework))
+        let version = try builtFramework.framework.version ?? getVersionFor(builtFramework.product)
         let dependenciesString = dependencies.joined(separator: "\n    ")
         return """
         Pod::Spec.new do |s|
-            s.name                   = '\(framework.libraryName)'
+            s.name                   = '\(builtFramework.framework.libraryName)'
             s.version                = '\(version)'
-            s.vendored_frameworks    = '\(framework.libraryName).framework'
+            s.vendored_frameworks    = '\(builtFramework.framework.libraryName).framework'
             \(dependenciesString)
             # Dummy data required by cocoapods
             s.authors                = 'dummy'
@@ -138,9 +148,9 @@ final class CocoaPodsIntegratorService {
     }
 }
 
-private extension Array where Element == FrameworkProduct {
-    func filter(matching framework: Framework) throws -> FrameworkProduct {
-        guard let product = first(where: { $0.libraryName == framework.libraryName }) else {
+private extension Array where Element == BuiltFramework {
+    func filter(matching framework: Framework) throws -> BuiltFramework {
+        guard let product = first(where: { $0.framework == framework }) else {
             throw CocoaPodsIntegratorServiceError.frameworkDoesNotHaveProduct(framework)
         }
         return product

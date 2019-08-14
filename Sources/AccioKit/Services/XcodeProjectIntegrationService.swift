@@ -91,49 +91,49 @@ final class XcodeProjectIntegrationService {
             let cachedFrameworkProducts = cachedFrameworkProducts.filter { $0.platformName == platform.rawValue }
 
             print("Copying \(cachedFrameworkProducts.count) cached build products to Dependencies folder for platform \(platform.rawValue).", level: .info)
-            try copy(frameworkProducts: cachedFrameworkProducts, to: dependenciesPath)
+            try cachedFrameworkProducts.forEach {
+                try copy(frameworkProduct: $0, to: dependenciesPath)
+            }
         }
     }
 
-    func updateDependencies(of appTarget: AppTarget, for platform: Platform, with frameworkProducts: [FrameworkProduct]) throws {
+    func updateDependencies(of appTarget: AppTarget, for platform: Platform, with frameworkProducts: [BuiltFramework]) throws {
         let dependenciesPlatformPath = "\(workingDirectory)/\(Constants.dependenciesPath)/\(platform.rawValue)"
-        let copiedFrameworkProducts: [FrameworkProduct] = try copy(frameworkProducts: frameworkProducts, of: appTarget, to: dependenciesPlatformPath)
-        try link(frameworkProducts: copiedFrameworkProducts, with: appTarget, for: platform)
+        let copiedFrameworkProducts: [BuiltFramework] = try copy(frameworkProducts: frameworkProducts, of: appTarget, to: dependenciesPlatformPath)
+        let frameworksToLink = try CocoaPodsIntegratorService(workingDirectory: workingDirectory).update(targetName: appTarget.targetName, builtFrameworks: copiedFrameworkProducts)
+        try link(frameworkProducts: frameworksToLink.map { $0.product }, with: appTarget, for: platform)
     }
 
-    private func copy(frameworkProducts: [FrameworkProduct], of appTarget: AppTarget, to targetPath: String) throws -> [FrameworkProduct] {
+    private func copy(frameworkProducts: [BuiltFramework], of appTarget: AppTarget, to targetPath: String) throws -> [BuiltFramework] {
         print("Copying build products of target '\(appTarget.targetName)' into folder '\(Constants.dependenciesPath)' ...", level: .info)
-        return try copy(frameworkProducts: frameworkProducts, to: targetPath)
+        return try frameworkProducts.map {
+            BuiltFramework($0.framework, try copy(frameworkProduct: $0.product, to: targetPath))
+        }
     }
 
     @discardableResult
-    private func copy(frameworkProducts: [FrameworkProduct], to targetPath: String) throws -> [FrameworkProduct] {
+    private func copy(frameworkProduct: FrameworkProduct, to targetPath: String) throws -> FrameworkProduct {
         try bash("mkdir -p '\(targetPath)'")
-        var copiedFrameworkProducts: [FrameworkProduct] = []
 
-        for frameworkProduct in frameworkProducts {
-            let frameworkDirPath = "\(targetPath)/\(frameworkProduct.frameworkDirUrl.lastPathComponent)"
-            let symbolsFilePath = "\(targetPath)/\(frameworkProduct.symbolsFileUrl.lastPathComponent)"
+        let frameworkDirPath = "\(targetPath)/\(frameworkProduct.frameworkDirUrl.lastPathComponent)"
+        let symbolsFilePath = "\(targetPath)/\(frameworkProduct.symbolsFileUrl.lastPathComponent)"
 
-            if FileManager.default.fileExists(atPath: frameworkDirPath) {
-                try bash("rm -rf '\(frameworkDirPath)'")
-            }
-
-            if FileManager.default.fileExists(atPath: symbolsFilePath) {
-                try bash("rm -rf '\(symbolsFilePath)'")
-            }
-
-            try bash("cp -R '\(frameworkProduct.frameworkDirPath)' '\(frameworkDirPath)'")
-            try bash("cp -R '\(frameworkProduct.symbolsFilePath)' '\(symbolsFilePath)'")
-
-            let frameworkProduct = FrameworkProduct(frameworkDirPath: frameworkDirPath, symbolsFilePath: symbolsFilePath, commitHash: frameworkProduct.commitHash)
-            try frameworkProduct.cleanupRecursiveFrameworkIfNeeded()
-            try verifyBundleVersion(of: frameworkProduct)
-
-            copiedFrameworkProducts.append(frameworkProduct)
+        if FileManager.default.fileExists(atPath: frameworkDirPath) {
+            try bash("rm -rf '\(frameworkDirPath)'")
         }
 
-        return copiedFrameworkProducts
+        if FileManager.default.fileExists(atPath: symbolsFilePath) {
+            try bash("rm -rf '\(symbolsFilePath)'")
+        }
+
+        try bash("cp -R '\(frameworkProduct.frameworkDirPath)' '\(frameworkDirPath)'")
+        try bash("cp -R '\(frameworkProduct.symbolsFilePath)' '\(symbolsFilePath)'")
+
+        let frameworkProduct = FrameworkProduct(frameworkDirPath: frameworkDirPath, symbolsFilePath: symbolsFilePath, commitHash: frameworkProduct.commitHash)
+        try frameworkProduct.cleanupRecursiveFrameworkIfNeeded()
+        try verifyBundleVersion(of: frameworkProduct)
+
+        return frameworkProduct
     }
 
     private func link(frameworkProducts: [FrameworkProduct], with appTarget: AppTarget, for platform: Platform) throws {

@@ -16,13 +16,13 @@ final class CarthageBuilderService {
         framework: Framework,
         platform: Platform,
         swiftVersion: String,
-        alreadyBuiltFrameworkProducts: [FrameworkProduct]
-    ) throws -> FrameworkProduct {
+        alreadyBuiltFrameworkProducts: [BuiltFramework]
+    ) throws -> BuiltFramework {
         print("Building library \(framework.libraryName) with Carthage ...", level: .info)
 
         // link already built subdependencies from previous calls of this method
         for requiredFramework in framework.requiredFrameworks.flattenedDeepFirstOrder() {
-            guard let requiredFrameworkProduct = alreadyBuiltFrameworkProducts.first(where: { $0.libraryName == requiredFramework.libraryName }) else {
+            guard let requiredFrameworkProduct = alreadyBuiltFrameworkProducts.first(where: { $0.product.libraryName == requiredFramework.libraryName })?.product else {
                 print("Could not find required framework '\(requiredFramework.libraryName)'s build products in already built frameworks.", level: .error)
                 throw CarthageBuilderError.requiredBuildProductsMissing
             }
@@ -65,6 +65,6 @@ final class CarthageBuilderService {
         print("Completed building scheme \(framework.libraryName) with Carthage.", level: .info)
         try frameworkCachingService.cache(product: frameworkProduct, framework: framework, platform: platform, swiftVersion: swiftVersion)
 
-        return frameworkProduct
+        return BuiltFramework(framework, frameworkProduct)
     }
 }

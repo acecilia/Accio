@@ -67,7 +67,7 @@ extension DependencyInstaller {
 
         let swiftVersion = try SwiftVersionDetectorService.shared.getCurrentSwiftVersion()
 
-        typealias ParsingResult = (target: AppTarget, platform: Platform, frameworkProducts: [FrameworkProduct])
+        typealias ParsingResult = (target: AppTarget, platform: Platform, builtFrameworks: [BuiltFramework])
 
         let appTargets: [AppTarget] = try manifest.appTargets()
         let parsingResults: [ParsingResult] = try appTargets.compactMap { appTarget in
@@ -79,20 +79,24 @@ extension DependencyInstaller {
             let platform = try PlatformDetectorService.shared.detectPlatform(of: appTarget)
             print("Resolving dependencies for target '\(appTarget.targetName)' on platform '\(platform.rawValue)' ...", level: .info)
 
-            let frameworkProducts = try CachedBuilderService(sharedCachePath: sharedCachePath).frameworkProducts(
+            let builtFrameworks = try CachedBuilderService(sharedCachePath: sharedCachePath).frameworkProducts(
                 manifest: manifest,
                 appTarget: appTarget,
                 dependencyGraph: dependencyGraph,
                 platform: platform,
                 swiftVersion: swiftVersion
             )
-            return ParsingResult(target: appTarget, platform: platform, frameworkProducts: frameworkProducts)
+            return ParsingResult(target: appTarget, platform: platform, builtFrameworks: builtFrameworks)
         }
 
         try XcodeProjectIntegrationService.shared.clearDependenciesFolder()
 
         for parsingResult in parsingResults {
-            try XcodeProjectIntegrationService.shared.updateDependencies(of: parsingResult.target, for: parsingResult.platform, with: parsingResult.frameworkProducts)
+            try XcodeProjectIntegrationService.shared.updateDependencies(
+                of: parsingResult.target,
+                for: parsingResult.platform,
+                with: parsingResult.builtFrameworks
+            )
         }
 
         try XcodeProjectIntegrationService.shared.handleRemovedTargets(keepingTargets: appTargets)
@@ -101,7 +105,7 @@ extension DependencyInstaller {
         try ResolvedManifestCachingService(sharedCachePath: sharedCachePath).cacheResolvedManifest(
             at: URL(fileURLWithPath: workingDirectory).appendingPathComponent("Package.resolved"),
             with: parsingResults.flatMap {
-                $0.frameworkProducts.map {
+                $0.builtFrameworks.products.map {
                     CachedFrameworkProduct(
                         libraryName: $0.libraryName,
                         commitHash: $0.commitHash,

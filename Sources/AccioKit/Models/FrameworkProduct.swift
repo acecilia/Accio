@@ -1,6 +1,6 @@
 import Foundation
 
-struct FrameworkProduct {
+struct FrameworkProduct: Equatable {
     let frameworkDirPath: String
     let symbolsFilePath: String
     let commitHash: String

@@ -114,7 +114,7 @@ class ManifestCommentsHandlerServiceTests: XCTestCase {
                             // defaultLinkage: .default,
                             // customLinkage: [.default: ["SwiftyBeaver", "Imperio"]],
                             // defaultIntegration: .binary,
-                            // customIntegration: [.binary: ["HandySwift", "MungoHealer"], .binary: ["HandyUIKit"]],
+                            // customIntegration: [.cocoapods: ["HandySwift", "MungoHealer"], .binary: ["HandyUIKit"]],
                         )
                     ]
                 )
@@ -187,15 +187,15 @@ class ManifestCommentsHandlerServiceTests: XCTestCase {
 
             let expectedResult = CommentInformation(
                 targetName: "TestProject-iOS",
-                defaultLinkage: LinkageType.default,
+                defaultLinkage: .default,
                 customLinkage: [
                     "SwiftyBeaver": .default,
                     "Imperio" : .default
                 ],
-                defaultIntegration: IntegrationType.binary,
+                defaultIntegration: .binary,
                 customIntegration: [
-                    "HandySwift": .binary,
-                    "MungoHealer": .binary,
+                    "HandySwift": .cocoapods,
+                    "MungoHealer": .cocoapods,
                     "HandyUIKit": .binary
                 ]
             )

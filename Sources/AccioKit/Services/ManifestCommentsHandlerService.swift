@@ -56,8 +56,6 @@ private enum Regex {
 
 /// A service that handles all logic related with parsing all the information from the manifest that is passed as accio comments
 final class ManifestCommentsHandlerService {
-    static let shared = ManifestCommentsHandlerService(workingDirectory: GlobalOptions.workingDirectory.value ?? FileManager.default.currentDirectoryPath)
-
     private let workingDirectory: URL
 
     /// A property that stores the result from parsing the comments on the manifest
@@ -272,12 +270,12 @@ enum LinkageType: String, CaseIterable {
 
 /// The type of integration to be used when adding the dependencies to the Xcode project
 enum IntegrationType: String, CaseIterable {
-    /// Adding the dependencies to the Xcode project as already compiled binaries (the option by default)
+    /// Link the dependencies to the Xcode project as already compiled binaries (the option by default)
     case binary
     /// Adding the dependencies to the Xcode project as source code
     // case source // TODO: implentation in the future
     /// Adding the dependencies to a cocoapods setup (using the compiled binaries, not source code)
-    // case cocoapods // TODO: implentation in the future
+    case cocoapods
 }
 
 // MARK: convenient extensions
